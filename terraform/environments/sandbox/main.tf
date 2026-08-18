@@ -2,7 +2,7 @@
 # User-provided tags are merged and can override these defaults.
 locals {
   baseline_tags = {
-    environment = "sandbox"
+    environment = var.environment
     assessment  = "azure-architecture"
     managed_by  = "terraform"
   }
@@ -49,8 +49,8 @@ module "monitoring" {
   location            = data.azurerm_resource_group.existing.location
   tags                = local.effective_tags
 
-  environment  = local.baseline_tags.environment
-  project_name = "abn-assessment"
+  environment  = var.environment
+  project_name = var.project_name
 }
 
 # Private DNS module deploys private DNS zones and links them to both hub and spoke VNets.
@@ -75,4 +75,56 @@ module "keyvault" {
   private_endpoint_subnet_id = module.networking.subnet_ids.spoke_private_endpoint
   private_dns_zone_id        = module.private_dns.private_dns_zone_ids["key_vault"]
   tags                       = local.effective_tags
+}
+
+# Storage module deploys a private storage account with blob private endpoint and DNS integration.
+module "storage" {
+  source = "../../modules/storage"
+
+  resource_group_name        = data.azurerm_resource_group.existing.name
+  location                   = data.azurerm_resource_group.existing.location
+  environment                = var.environment
+  project_name               = var.project_name
+  private_endpoint_subnet_id = module.networking.subnet_ids.spoke_private_endpoint
+  private_dns_zone_id        = module.private_dns.private_dns_zone_ids["blob"]
+  tags                       = local.effective_tags
+}
+
+# ACR module deploys a private Azure Container Registry with private endpoint and DNS integration.
+module "acr" {
+  source = "../../modules/acr"
+
+  resource_group_name        = data.azurerm_resource_group.existing.name
+  location                   = data.azurerm_resource_group.existing.location
+  environment                = var.environment
+  project_name               = var.project_name
+  private_endpoint_subnet_id = module.networking.subnet_ids.spoke_private_endpoint
+  private_dns_zone_id        = module.private_dns.private_dns_zone_ids["acr"]
+  tags                       = local.effective_tags
+}
+
+# AKS module deploys a private AKS cluster integrated with existing network and monitoring resources.
+module "aks" {
+  source = "../../modules/aks"
+
+  resource_group_name        = data.azurerm_resource_group.existing.name
+  location                   = data.azurerm_resource_group.existing.location
+  cluster_name               = "aks-${var.project_name}-${var.environment}"
+  aks_subnet_id              = module.networking.subnet_ids.spoke_aks
+  log_analytics_workspace_id = module.monitoring.workspace_resource_id
+  tags                       = local.effective_tags
+}
+
+# Workload identity module enables Microsoft Entra federation between AKS service account and a UAMI.
+module "workload_identity" {
+  source = "../../modules/workload-identity"
+
+  resource_group_name             = data.azurerm_resource_group.existing.name
+  location                        = data.azurerm_resource_group.existing.location
+  managed_identity_name           = "mi-shows-api"
+  aks_oidc_issuer_url             = module.aks.oidc_issuer_url
+  kubernetes_namespace            = "app"
+  kubernetes_service_account_name = "shows-api-sa"
+  keyvault_id                     = module.keyvault.key_vault_id
+  tags                            = local.effective_tags
 }

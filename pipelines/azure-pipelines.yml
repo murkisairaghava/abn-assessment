@@ -1,0 +1,263 @@
+name: $(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app/*
+      - helm/*
+      - terraform/*
+      - pipelines/*
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - app/*
+      - helm/*
+      - terraform/*
+      - pipelines/*
+
+variables:
+  - template: vars.yml
+  - name: imageTag
+    value: $(Build.BuildId)
+
+stages:
+  - stage: Validate
+    displayName: '1. Validate'
+    jobs:
+      - job: ValidateIaCAndChart
+        displayName: 'Terraform fmt/validate + Helm lint'
+        pool:
+          name: $(selfHostedPool)
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: AzureCLI@2
+            displayName: 'Terraform fmt and validate'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                if ! command -v terraform >/dev/null 2>&1; then
+                  echo "terraform not found on self-hosted agent"
+                  exit 1
+                fi
+
+                terraform -chdir=terraform fmt -check -recursive
+
+                if [ -f terraform/main.tf ]; then
+                  terraform -chdir=terraform init -backend=false -input=false
+                  terraform -chdir=terraform validate
+                else
+                  tf_dirs=$(find terraform -type f -name '*.tf' -exec dirname {} \; | sort -u)
+                  if [ -z "${tf_dirs}" ]; then
+                    echo "No Terraform files found under terraform/"
+                    exit 1
+                  fi
+
+                  while IFS= read -r dir; do
+                    echo "Validating ${dir}"
+                    terraform -chdir="${dir}" init -backend=false -input=false
+                    terraform -chdir="${dir}" validate
+                  done <<< "${tf_dirs}"
+                fi
+
+          - script: |
+              set -euo pipefail
+              if ! command -v helm >/dev/null 2>&1; then
+                echo "helm not found on self-hosted agent"
+                exit 1
+              fi
+              helm lint $(helmChartPath)
+            displayName: 'Helm lint'
+
+  - stage: Build
+    displayName: '2. Build'
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - job: BuildAndPushImage
+        displayName: 'Build and tag container image'
+        pool:
+          name: $(selfHostedPool)
+        steps:
+          - checkout: self
+            clean: true
+
+          - task: AzureCLI@2
+            displayName: 'Build, tag, and push image to ACR'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                if ! command -v docker >/dev/null 2>&1; then
+                  echo "docker not found on self-hosted agent"
+                  exit 1
+                fi
+
+                az acr login --name $(acrName)
+
+                IMAGE_FULL_TAG="$(acrLoginServer)/$(imageRepository):$(imageTag)"
+                IMAGE_LATEST_TAG="$(acrLoginServer)/$(imageRepository):latest"
+
+                docker build \
+                  -f $(dockerfilePath) \
+                  -t "${IMAGE_FULL_TAG}" \
+                  -t "${IMAGE_LATEST_TAG}" \
+                  $(dockerBuildContext)
+
+                docker push "${IMAGE_FULL_TAG}"
+                docker push "${IMAGE_LATEST_TAG}"
+
+                echo "##vso[task.setvariable variable=IMAGE_FULL_TAG;isOutput=true]${IMAGE_FULL_TAG}"
+            name: buildOutput
+
+  - stage: Security
+    displayName: '3. Security'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: SecurityScans
+        displayName: 'Terraform and container security scans'
+        pool:
+          name: $(selfHostedPool)
+        steps:
+          - checkout: self
+            clean: true
+
+          - script: |
+              set -euo pipefail
+
+              if ! command -v tfsec >/dev/null 2>&1; then
+                echo "Installing tfsec"
+                curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+              fi
+
+              tfsec terraform --minimum-severity HIGH
+            displayName: 'Terraform security scan (tfsec)'
+
+          - task: AzureCLI@2
+            displayName: 'Container image security scan (Trivy)'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                if ! command -v trivy >/dev/null 2>&1; then
+                  echo "Installing trivy"
+                  curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+                fi
+
+                az acr login --name $(acrName)
+
+                IMAGE_FULL_TAG="$(acrLoginServer)/$(imageRepository):$(imageTag)"
+                trivy image --severity HIGH,CRITICAL --exit-code 1 --no-progress "${IMAGE_FULL_TAG}"
+
+  - stage: Deploy
+    displayName: '4. Deploy'
+    dependsOn: Security
+    condition: succeeded()
+    jobs:
+      - deployment: DeployToAks
+        displayName: 'Deploy Helm chart to AKS'
+        pool:
+          name: $(selfHostedPool)
+        environment: 'aks-production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  clean: true
+
+                - task: AzureCLI@2
+                  displayName: 'AKS auth and Helm upgrade'
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+
+                      az aks get-credentials \
+                        --resource-group $(aksResourceGroup) \
+                        --name $(aksClusterName) \
+                        --overwrite-existing
+
+                      kubectl create namespace $(k8sNamespace) --dry-run=client -o yaml | kubectl apply -f -
+
+                      helm upgrade --install $(helmReleaseName) $(helmChartPath) \
+                        --namespace $(k8sNamespace) \
+                        --wait \
+                        --timeout 10m \
+                        --set image.repository=$(acrLoginServer)/$(imageRepository) \
+                        --set image.tag=$(imageTag)
+
+  - stage: SmokeTest
+    displayName: '5. Smoke Test'
+    dependsOn: Deploy
+    condition: succeeded()
+    jobs:
+      - job: Smoke
+        displayName: 'Validate health and API endpoints'
+        pool:
+          name: $(selfHostedPool)
+        steps:
+          - checkout: self
+            clean: false
+
+          - task: AzureCLI@2
+            displayName: 'Call /health and /api/shows'
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+
+                az aks get-credentials \
+                  --resource-group $(aksResourceGroup) \
+                  --name $(aksClusterName) \
+                  --overwrite-existing
+
+                kubectl -n $(k8sNamespace) rollout status deployment/$(helmReleaseName) --timeout=5m
+
+                kubectl -n $(k8sNamespace) port-forward svc/$(helmReleaseName) 18080:80 >/tmp/shows-api-port-forward.log 2>&1 &
+                PF_PID=$!
+
+                cleanup() {
+                  if ps -p "${PF_PID}" >/dev/null 2>&1; then
+                    kill "${PF_PID}" || true
+                  fi
+                }
+                trap cleanup EXIT
+
+                for _ in {1..30}; do
+                  if curl -fsS http://127.0.0.1:18080/health >/dev/null 2>&1; then
+                    break
+                  fi
+                  sleep 2
+                done
+
+                echo 'Smoke test: GET /health'
+                curl -fSs http://127.0.0.1:18080/health
+                echo
+
+                echo 'Smoke test: GET /api/shows?query=girls'
+                curl -fSs "http://127.0.0.1:18080/api/shows?query=girls"
+                echo

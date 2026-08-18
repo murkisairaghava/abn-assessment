@@ -1,0 +1,1 @@
+The Azure Container Registry was successfully deployed with Premium SKU, Private Endpoint, Private DNS and Public Network Access disabled. Direct image push validation from the workstation could not be completed because the user account lacked registry data-plane permissions. The ACR configuration and networking were successfully validated.

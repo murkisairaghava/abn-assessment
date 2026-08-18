@@ -1,0 +1,78 @@
+# Replica count for the deployment
+replicaCount: 2
+
+# Kubernetes namespace (defaults to release namespace if empty)
+namespace: ""
+
+# Container image configuration
+image:
+  repository: ghcr.io/example/shows-api
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+# ServiceAccount configuration
+serviceAccount:
+  # Whether to create a new ServiceAccount
+  create: true
+  # Name of the ServiceAccount (defaults to release name with -sa suffix)
+  name: ""
+  # Whether to mount the service account token
+  automountServiceAccountToken: true
+  # Additional annotations for the ServiceAccount
+  annotations: {}
+
+# Azure Workload Identity configuration
+workloadIdentity:
+  enabled: true
+  # Azure Entra Client ID for the Workload Identity
+  clientId: ""
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+
+# Container listening port
+containerPort: 8080
+
+# Health check probe configuration
+probes:
+  readiness:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  liveness:
+    path: /health
+    initialDelaySeconds: 20
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Resource requests and limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ConfigMap data for application configuration
+config:
+  LOG_LEVEL: "info"
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector for pod scheduling
+nodeSelector: {}
+
+# Node affinity for pod scheduling
+affinity: {}
+
+# Pod tolerations for node taints
+tolerations: []

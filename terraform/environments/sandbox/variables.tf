@@ -3,6 +3,16 @@ variable "resource_group_name" {
   type        = string
 }
 
+variable "environment" {
+  description = "Environment short name used for naming across modules."
+  type        = string
+}
+
+variable "project_name" {
+  description = "Project name used for naming across modules."
+  type        = string
+}
+
 variable "keyvault_name" {
   description = "Name of the Key Vault deployed by the sandbox environment."
   type        = string

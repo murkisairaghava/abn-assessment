@@ -1,7 +1,7 @@
-resource_group_name = "nebula-sandbox-saimurki-e17afceb"
+resource_group_name = "nebula-sandbox-saimurki-b394f87b"
 environment         = "sandbox"
 project_name        = "abn-assessment"
-keyvault_name       = "kv-abn-assessment-sbx"
+keyvault_name       = "kv-abn-sbx-b394f87b"
 
 tags = {
   environment = "sandbox"

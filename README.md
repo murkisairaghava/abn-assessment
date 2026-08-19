@@ -137,10 +137,17 @@ abn-assessment/
 	aks/
 	app/
 	docs/
+		AKS_WORKLOAD_IDENTITY_ARCHITECTURE.md
+		BLOB_STORAGE_CACHING.md
+		HELM_CHART_ASSESSMENT.md
+		HELM_CHART_VERIFICATION.md
+		aks-platform.md
 		architecture.md
 		decisions.md
-		lessons-learned.md
+		issues-and-lessons-learned.md
 		networking.md
+		private-networking.md
+		private-services.md
 		workload-identity.md
 	helm/
 		shows-api/
@@ -172,6 +179,7 @@ abn-assessment/
 Validation activities completed for this assessment include:
 
 - Terraform validation workflow execution and iterative module compatibility fixes
+- Terraform planning issue remediation for private DNS `for_each` by using deterministic map keys (hub/spoke) with apply-time IDs as values
 - Helm chart lint validation with zero lint failures
 - Helm template rendering checks using default and custom values
 - Verification of configurable image repository, image tag, and namespace behavior

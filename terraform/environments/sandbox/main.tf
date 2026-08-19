@@ -59,10 +59,10 @@ module "private_dns" {
 
   resource_group_name = data.azurerm_resource_group.existing.name
   tags                = local.effective_tags
-  vnet_ids = toset([
-    module.networking.vnet_ids.hub,
-    module.networking.vnet_ids.spoke
-  ])
+  vnet_ids = {
+    hub   = module.networking.vnet_ids.hub
+    spoke = module.networking.vnet_ids.spoke
+  }
 }
 
 # Key Vault module deploys a private Key Vault integrated with private endpoint and private DNS.

@@ -10,8 +10,8 @@ variable "tags" {
 }
 
 variable "vnet_ids" {
-  description = "Set of virtual network IDs to link with each private DNS zone."
-  type        = set(string)
+  description = "Map of virtual network IDs keyed by stable names (for example: hub, spoke)."
+  type        = map(string)
 
   validation {
     condition     = length(var.vnet_ids) > 0

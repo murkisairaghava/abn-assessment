@@ -1,11 +1,5 @@
 # Azure AKS Workload Identity Architecture
 
-**Document Type:** Architecture Review  
-**Date:** 2026-08-18  
-**Classification:** Technical Design  
-**Audience:** Infrastructure Leadership, Security Review Board
-
----
 
 ## Executive Summary
 

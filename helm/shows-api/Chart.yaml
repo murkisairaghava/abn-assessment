@@ -1,0 +1,17 @@
+apiVersion: v2
+name: shows-api
+description: Production-ready Helm chart for FastAPI shows API on AKS with Workload Identity
+kind: application
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+icon: https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png
+maintainers:
+  - name: Platform Engineering
+    email: platform@example.com
+home: https://github.com/example/shows-api
+keywords:
+  - fastapi
+  - aks
+  - kubernetes
+  - workload-identity

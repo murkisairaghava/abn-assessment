@@ -1,0 +1,22 @@
+# Terraform working directories and local state artifacts
+**/.terraform/*
+
+# Keep lock files in source control for deterministic provider versions
+!**/.terraform.lock.hcl
+
+# Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Local override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform crash logs
+crash.log
+crash.*.log
+
+# Variable files that may contain sensitive values
+*.auto.tfvars

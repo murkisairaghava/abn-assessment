@@ -1,0 +1,30 @@
+variables:
+  - name: selfHostedPool
+    value: self-hosted-linux
+
+  - name: dockerfilePath
+    value: app/Dockerfile
+  - name: dockerBuildContext
+    value: app
+  - name: imageRepository
+    value: shows-api
+
+  - name: acrName
+    value: myacr
+  - name: acrLoginServer
+    value: myacr.azurecr.io
+
+  - name: aksResourceGroup
+    value: rg-aks-prod
+  - name: aksClusterName
+    value: aks-prod-private
+  - name: k8sNamespace
+    value: production
+
+  - name: helmChartPath
+    value: helm/shows-api
+  - name: helmReleaseName
+    value: shows-api
+
+  - name: azureServiceConnection
+    value: sc-azure-platform-prod
